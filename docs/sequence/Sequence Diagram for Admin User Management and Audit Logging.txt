@@ -1,0 +1,36 @@
+sequenceDiagram
+    actor "Mobile App" as fluttermobileapp
+    participant "Firebase Auth" as firebaseauth
+    participant "Firestore Database" as firestoredb
+    participant "Audit Logger Function" as auditloggerfn
+
+    loop Admin User Invitation
+        note over fluttermobileapp: The first loop represents the initial user invitation flow.
+        fluttermobileapp-firebaseauth: 1. Admin invites new user. App calls createUserWithEmailAndPassword(email, password)
+        activate firebaseauth
+        firebaseauth--fluttermobileapp: 1.1. Returns UserCredential (with new uid)
+        deactivate firebaseauth
+        fluttermobileapp-firestoredb: 1.2. set('/users/{uid}', {..., status: 'Invited'})
+        activate firestoredb
+        firestoredb--fluttermobileapp: Success
+        deactivate firestoredb
+    end
+
+    note over fluttermobileapp: 2. Some time later...
+
+    loop User Role Update
+        note over fluttermobileapp: The second loop represents a separate, later action to update the user's role.
+        fluttermobileapp-firestoredb: 3. Admin changes role. App calls update('/users/{uid}', {role: 'Supervisor'})
+        activate firestoredb
+        firestoredb--fluttermobileapp: Success
+        firestoredb-auditloggerfn: 3.1. [EVENT] onUpdate trigger for /users/{uid}
+        deactivate firestoredb
+        activate auditloggerfn
+        note right of auditloggerfn: This is an asynchronous, event-driven interaction. The function is invoked by Firestore in the background after the user document is updated. The mobile app is not aware of this process.
+        auditloggerfn-auditloggerfn: 3.1.1. Process event, compare before/after data, build audit log payload
+        auditloggerfn-firestoredb: 3.1.2. create('/auditLogs/{logId}', {action: 'ROLE_CHANGED', ...})
+        activate firestoredb
+        firestoredb--auditloggerfn: Success
+        deactivate firestoredb
+        deactivate auditloggerfn
+    end

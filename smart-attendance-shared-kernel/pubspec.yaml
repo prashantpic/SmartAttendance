@@ -1,0 +1,34 @@
+name: smart_attendance_shared
+description: A shared kernel for the Smart Attendance mobile application, containing common models, widgets, and utilities.
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Models & Logic
+  equatable: ^2.0.5
+  json_annotation: ^4.8.1
+  cloud_firestore: ^4.9.0 # For Timestamp and GeoPoint types
+  
+  # Utilities
+  intl: ^0.18.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # Code Generation
+  build_runner: ^2.4.6
+  json_serializable: ^6.7.1
+
+  # Linting
+  flutter_lints: ^2.0.0
+
+flutter:
+  # No assets or fonts are defined here. They belong to the main app.

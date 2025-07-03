@@ -1,0 +1,47 @@
+sequenceDiagram
+    actor "Mobile App (Admin UI)" as fluttermobileapp
+    participant "Firestore Database" as firestoredb
+    participant "Hierarchy Update Function" as hierarchyupdatefn
+
+    note over fluttermobileapp: Admin initiates the change via the User Management interface.
+    fluttermobileapp-firestoredb: 1. update('users/userA', { supervisorId: 'supervisorYid' })
+    activate firestoredb
+
+    firestoredb-firestoredb: 2. Processes write and triggers backend events
+    
+    note right of hierarchyupdatefn: The onUpdate trigger on the 'users' collection is configured to invoke this function only when the 'supervisorId' field changes.
+    firestoredb--hierarchyupdatefn: 3. onUpdate Event(userAbefore, userAafter)
+    deactivate firestoredb
+    activate hierarchyupdatefn
+
+    opt if supervisorId has changed
+        hierarchyupdatefn-firestoredb: 3.1.1. get('users/supervisorYid')
+        activate firestoredb
+        firestoredb--hierarchyupdatefn: Supervisor Y document (with approverHierarchy)
+        deactivate firestoredb
+
+        hierarchyupdatefn-hierarchyupdatefn: 3.1.2. Calculate new approverHierarchy for User A
+
+        hierarchyupdatefn-firestoredb: 3.1.3. update('users/userA', { approverHierarchy: newhierarchy })
+        activate firestoredb
+        firestoredb--hierarchyupdatefn: ack
+        deactivate firestoredb
+
+        loop For each descendant of User A
+            hierarchyupdatefn-firestoredb: 3.1.4.1. query(users, where('supervisorId', '==', ...))
+            activate firestoredb
+            firestoredb--hierarchyupdatefn: List of direct subordinates
+            deactivate firestoredb
+
+            hierarchyupdatefn-hierarchyupdatefn: 3.1.4.2. Recursively find all descendants
+
+            hierarchyupdatefn-hierarchyupdatefn: 3.1.4.3. Prepare batch update for all descendants
+        end
+
+        hierarchyupdatefn-firestoredb: 3.1.5. batch.commit()
+        activate firestoredb
+        note right of hierarchyupdatefn: The function uses a batch write to atomically update the approverHierarchy for all affected subordinates, ensuring data consistency.
+        firestoredb--hierarchyupdatefn: Batch write successful
+        deactivate firestoredb
+    end
+    deactivate hierarchyupdatefn

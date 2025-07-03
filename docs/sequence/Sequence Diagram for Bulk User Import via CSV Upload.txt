@@ -1,0 +1,65 @@
+sequenceDiagram
+    actor "Admin" as adminactor
+    participant "Mobile App (Flutter)" as fluttermobileapp
+    participant "Firebase Storage" as firebasestorage
+    participant "Bulk User Import Function" as bulkuserimportfn
+    participant "Firebase Authentication" as firebaseauth
+    participant "Firestore Database" as firestoredb
+
+    adminactor-fluttermobileapp: 1. Initiates bulk user import
+    activate fluttermobileapp
+    fluttermobileapp--adminactor: 2. Presents file selector UI
+
+    adminactor-fluttermobileapp: 3. Selects userdata.csv
+
+    fluttermobileapp-firebasestorage: 4. [POST] Uploads CSV to /imports/{tenantId}/import.csv
+    activate firebasestorage
+    firebasestorage--fluttermobileapp: 5. [200 OK] Upload successful
+    deactivate firebasestorage
+
+    note over firebasestorage: File upload to a specific path in Firebase Storage triggers the Cloud Function. Access to this path is secured by Storage Security Rules.
+    firebasestorage-bulkuserimportfn: 6. [Event] Triggers onFinalize(file)
+    activate bulkuserimportfn
+    note over bulkuserimportfn: The function must be idempotent or handle re-processing of the same file to avoid creating duplicate users.
+
+    bulkuserimportfn-firebasestorage: 7. [GET] Reads userdata.csv
+    activate firebasestorage
+    firebasestorage--bulkuserimportfn: 8. Returns file content
+    deactivate firebasestorage
+
+    bulkuserimportfn-bulkuserimportfn: 9. Parses CSV data into records
+
+    loop For each row in CSV records
+        alt If row data is valid
+            bulkuserimportfn-firebaseauth: 10.1.1. Creates user in Auth service
+            activate firebaseauth
+            firebaseauth--bulkuserimportfn: 10.1.2. Returns new user {uid}
+            deactivate firebaseauth
+
+            bulkuserimportfn-firestoredb: 10.1.3. [Query] Finds supervisor by email from row
+            activate firestoredb
+            firestoredb--bulkuserimportfn: 10.1.4. Returns supervisor {userId}
+            deactivate firestoredb
+
+            bulkuserimportfn-firestoredb: 10.1.5. Creates user document in DB (status: 'Invited')
+            activate firestoredb
+            firestoredb--bulkuserimportfn: 10.1.6. Confirms document creation
+            deactivate firestoredb
+
+            bulkuserimportfn-bulkuserimportfn: 10.1.7. Adds row to success report
+        else Else (row data is invalid)
+            bulkuserimportfn-bulkuserimportfn: 10.2.1. Adds row and error to failure report
+        end
+    end
+
+    bulkuserimportfn-bulkuserimportfn: 11. Compiles final validation report
+
+    bulkuserimportfn-firestoredb: 12. [POST] Writes final report to /importReports/{reportId}
+    activate firestoredb
+    firestoredb--bulkuserimportfn: 13. [201 Created]
+    deactivate firestoredb
+    
+    note over fluttermobileapp: The app uses a Firestore snapshot listener to get a real-time update when the report is ready, providing a seamless UX for the Admin.
+    bulkuserimportfn-fluttermobileapp: 14. [Event] Notifies Admin of completion via listener
+    deactivate bulkuserimportfn
+    deactivate fluttermobileapp

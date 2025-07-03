@@ -1,0 +1,65 @@
+sequenceDiagram
+    actor "Google Cloud Scheduler" as googlecloudscheduler
+    participant "Sheets Export Function" as sheetsexportfn
+    participant "Firestore Database" as firestoredb
+    participant "Google Sheets API" as googlesheetsapi
+    participant "FCM Service" as fcmservice
+
+    googlecloudscheduler-sheetsexportfn: 1. [event] Trigger scheduled job (e.g., daily at 02:00 UTC)
+    activate sheetsexportfn
+
+    sheetsexportfn-firestoredb: 2. Get tenants with sheets to sync
+    activate firestoredb
+    firestoredb--sheetsexportfn: 2.1. Return LinkedSheet configurations
+    deactivate firestoredb
+
+    loop For each tenant with a linked sheet
+        sheetsexportfn-firestoredb: 3. Get unprocessed Attendance records since last sync
+        activate firestoredb
+        note over firestoredb: The sync function is idempotent. It uses the lastSyncTimestamp to fetch only new records, preventing duplicates on re-runs.
+        firestoredb--sheetsexportfn: 3.1. Return Array of Attendance records
+        deactivate firestoredb
+
+        opt If no new records, skip to next tenant
+            sheetsexportfn-sheetsexportfn: 3.2. Continue to next iteration
+        end
+
+        note over sheetsexportfn: Function transforms Firestore records into a 2D array (rows) suitable for the Sheets API.
+        sheetsexportfn-googlesheetsapi: 4. sheets.spreadsheets.values.append(data)
+        activate googlesheetsapi
+
+        alt Success (200 OK)
+            googlesheetsapi--sheetsexportfn: 4.1. Return Success Response
+            deactivate googlesheetsapi
+            sheetsexportfn-firestoredb: 4.2. updateLinkedSheet(status: 'Success', timestamp: now())
+            activate firestoredb
+            firestoredb--sheetsexportfn: 4.3. Return Acknowledged
+            deactivate firestoredb
+        else Transient Error (e.g., 503)
+            googlesheetsapi--sheetsexportfn: 4.1. Return Transient Error Response
+            deactivate googlesheetsapi
+            loop Retry with exponential backoff
+                note right of sheetsexportfn: After all retry attempts fail, the function treats the error as permanent and proceeds to the Permanent Error path.
+                sheetsexportfn-googlesheetsapi: 4.2.1. sheets.spreadsheets.values.append(data)
+                activate googlesheetsapi
+                googlesheetsapi--sheetsexportfn: 4.2.2. Return Final Response
+                deactivate googlesheetsapi
+            end
+        else Permanent Error (e.g., 403 Permission Denied)
+            googlesheetsapi--sheetsexportfn: 4.1. Return Permanent Error Response
+            deactivate googlesheetsapi
+            sheetsexportfn-firestoredb: 4.2. updateLinkedSheet(status: 'Failed', error: 'Permission Denied')
+            activate firestoredb
+            firestoredb--sheetsexportfn: 4.3. Return Acknowledged
+            deactivate firestoredb
+            sheetsexportfn-firestoredb: 4.4. Get Admin FCM token for tenant
+            activate firestoredb
+            firestoredb--sheetsexportfn: 4.5. Return Admin User data with fcmToken
+            deactivate firestoredb
+            sheetsexportfn-fcmservice: 4.6. [event] Send sync failure notification
+            activate fcmservice
+            deactivate fcmservice
+        end
+    end
+
+    deactivate sheetsexportfn

@@ -1,0 +1,51 @@
+sequenceDiagram
+    actor "Flutter Mobile App" as flutterMobileApp
+    participant "Firebase App Check" as firebaseAppCheck
+    participant "Firebase Authentication" as firebaseAuth
+    participant "Firestore Database" as firestoreDb
+
+    activate flutterMobileApp
+    flutterMobileApp-flutterMobileApp: 1. User enters credentials and taps 'Login'
+    
+    flutterMobileApp-firebaseAppCheck: 2. getToken()
+    activate firebaseAppCheck
+    firebaseAppCheck--flutterMobileApp: appCheckToken
+    deactivate firebaseAppCheck
+    
+    note over flutterMobileApp: Request to Firebase Auth includes the short-lived App Check token in the headers to prove client integrity.
+    flutterMobileApp-firebaseAuth: 3. signInWithEmailAndPassword(email, password)
+    activate firebaseAuth
+    
+    firebaseAuth-firebaseAppCheck: 3.1. verifyToken(appCheckToken)
+    activate firebaseAppCheck
+    firebaseAppCheck--firebaseAuth: verificationSuccess
+    deactivate firebaseAppCheck
+    
+    alt 3.2. [App Check Verified]
+        firebaseAuth-firebaseAuth: 3.2.1. processCredentials()
+        alt 3.2.2. [Credentials Valid]
+            firebaseAuth--flutterMobileApp: idToken, userUID
+        else 3.2.3. [Credentials Invalid]
+            firebaseAuth--flutterMobileApp: Error: Invalid Credentials
+        end
+    else 3.3. [App Check Failed]
+        firebaseAuth--flutterMobileApp: Error: App integrity cannot be verified
+    end
+    deactivate firebaseAuth
+    
+    alt 4. [Login Successful]
+        note over flutterMobileApp: Subsequent requests to protected resources like Firestore also include the user's ID token (for authentication) and a fresh App Check token (for integrity).
+        flutterMobileApp-firestoreDb: 4.1. getUserProfile(userUID)
+        activate firestoreDb
+        
+        firestoreDb-firebaseAppCheck: 4.1.1. verifyToken(appCheckToken)
+        activate firebaseAppCheck
+        firebaseAppCheck--firestoreDb: verificationSuccess
+        deactivate firebaseAppCheck
+        
+        firestoreDb-firestoreDb: 4.1.2. validateIdTokenAndRules()
+        
+        firestoreDb--flutterMobileApp: userProfileData
+        deactivate firestoreDb
+    end
+    deactivate flutterMobileApp

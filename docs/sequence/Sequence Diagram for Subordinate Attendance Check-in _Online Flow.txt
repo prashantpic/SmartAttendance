@@ -1,0 +1,70 @@
+sequenceDiagram
+    actor "Subordinate User" as user
+    participant "Flutter Mobile App" as fluttermobileapp
+    participant "Device GPS Service" as devicegpsservice
+    participant "Firebase App Check" as firebaseappcheck
+    participant "Firestore DB" as firestoredb
+    participant "AttendanceProcessorFunction" as attendanceprocessorfn
+    participant "Google Maps Geocoding API" as googlemapsgeocodingapi
+    participant "NotificationDispatcherFunction" as notificationdispatcherfn
+    participant "FCM Service" as fcmservice
+
+    user-fluttermobileapp: 1. Taps 'Check-in' button
+    activate fluttermobileapp
+    note over fluttermobileapp: User is assumed to be authenticated and have an active session.
+
+    fluttermobileapp-devicegpsservice: 2. getCurrentLocation()
+    activate devicegpsservice
+    devicegpsservice--fluttermobileapp: GPS Coordinates & Accuracy
+    deactivate devicegpsservice
+
+    fluttermobileapp-firebaseappcheck: 3. getToken(true)
+    activate firebaseappcheck
+    firebaseappcheck--fluttermobileapp: App Check Token
+    deactivate firebaseappcheck
+
+    fluttermobileapp-firestoredb: 4. Create Attendance Document (with App Check token)
+    activate firestoredb
+    loop 4.1 Validate Request
+        firestoredb-firestoredb: Validate Request (App Check & Security Rules)
+    end
+    firestoredb--fluttermobileapp: Write Acknowledged
+
+    fluttermobileapp--user: 5. UI Updated (e.g., 'Check-in successful')
+    deactivate fluttermobileapp
+
+    par 6. Parallel Firestore onCreate Triggers
+        note right of firestoredb: The 'onCreate' event on the Firestore document triggers both the processor and notification functions in parallel. Their execution order is not guaranteed.
+        firestoredb-attendanceprocessorfn: 6.1. Invoke: attendanceRecord.onCreate
+        activate attendanceprocessorfn
+        attendanceprocessorfn-googlemapsgeocodingapi: 6.1.1. reverseGeocode(checkInLocation)
+        activate googlemapsgeocodingapi
+        googlemapsgeocodingapi--attendanceprocessorfn: Formatted Address
+        deactivate googlemapsgeocodingapi
+        
+        attendanceprocessorfn-firestoredb: 6.1.2. Read User Hierarchy (for approverHierarchy)
+        activate firestoredb
+        note over attendanceprocessorfn: Reading the full user hierarchy may involve multiple, sequential reads from Firestore to trace the supervisor chain.
+        firestoredb--attendanceprocessorfn: Supervisor chain IDs
+        deactivate firestoredb
+        
+        attendanceprocessorfn-firestoredb: 6.1.3. Update Attendance (add address, hierarchy, serverTimestamp)
+        activate firestoredb
+        firestoredb--attendanceprocessorfn: Update Acknowledged
+        deactivate firestoredb
+        deactivate attendanceprocessorfn
+    and
+        firestoredb-notificationdispatcherfn: 6.2. Invoke: attendanceRecord.onCreate
+        activate notificationdispatcherfn
+        notificationdispatcherfn-firestoredb: 6.2.1. Read Supervisor's FCM Token
+        activate firestoredb
+        firestoredb--notificationdispatcherfn: FCM Token
+        deactivate firestoredb
+        
+        notificationdispatcherfn-fcmservice: 6.2.2. Send Push Notification (to Supervisor)
+        activate fcmservice
+        fcmservice--notificationdispatcherfn: Send Acknowledged
+        deactivate fcmservice
+        deactivate notificationdispatcherfn
+    end
+    deactivate firestoredb

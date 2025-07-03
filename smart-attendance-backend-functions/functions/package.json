@@ -1,0 +1,31 @@
+{
+  "name": "smart-attendance-backend-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for the Smart Attendance system.",
+  "main": "lib/index.js",
+  "private": true,
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.5",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0",
+    "googleapis": "^134.0.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-import": "^2.29.1",
+    "firebase-functions-test": "^3.2.0",
+    "typescript": "^5.3.3"
+  },
+  "scripts": {
+    "lint": "eslint --ext .js,.ts .",
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "deploy": "firebase deploy --only functions"
+  }
+}

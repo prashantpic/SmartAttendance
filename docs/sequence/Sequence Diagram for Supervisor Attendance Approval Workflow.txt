@@ -1,46 +1,43 @@
 sequenceDiagram
-    actor Supervisor
-    participant "Flutter App" as REPO001CLIENT
-    participant "Firestore DB" as REPO003DB
-    participant "Notification Service" as REPO005SVCNOTIFY
+    actor "Flutter Mobile App" as FlutterMobileApp
+    participant "Firestore Database" as FirestoreDB
+    participant "Notification Dispatcher" as NotificationDispatcher
+    participant "FCM Service" as FCMService
 
-    Supervisor-REPO001CLIENT: 1. Navigates to 'Approvals' Dashboard
-    activate REPO001CLIENT
+    activate FlutterMobileApp
+    note over FlutterMobileApp: Supervisor initiates by viewing their approval dashboard.
+    FlutterMobileApp-FirestoreDB: 1. query(approverHierarchy contains myId, status=='Pending')
+    activate FirestoreDB
+    note right of FirestoreDB: This efficient query uses the denormalized approverHierarchy array, a core performance optimization.
+    FirestoreDB--FlutterMobileApp: list
+    deactivate FirestoreDB
 
-    REPO001CLIENT-REPO003DB: 2. query(collection: 'attendance', where: 'approverHierarchy' array-contains supervisorId, 'status' == 'Pending')
-    activate REPO003DB
-    note over REPO003DB: Query uses an efficient array-contains filter on a pre-populated approverHierarchy field to find all records that this supervisor is responsible for.
+    FlutterMobileApp-FlutterMobileApp: 2. renderApprovalList(records)
 
-    REPO003DB--REPO001CLIENT: 3. return [pendingAttendanceRecords]
-    deactivate REPO003DB
-
-    REPO001CLIENT-REPO001CLIENT: 4. renderPendingList()
-
-    Supervisor-REPO001CLIENT: 5. Selects record and taps 'Approve'
-    note right of REPO001CLIENT: The Supervisor tapping 'Reject' follows the same flow, but the status is updated to 'Rejected'.
-
-    REPO001CLIENT-REPO003DB: 6. update('attendance/recordId', {status: 'Approved', approvalDetails: {...}})
-    activate REPO003DB
-
-    REPO003DB--REPO001CLIENT: 6.1. ack(success)
-
-    REPO001CLIENT-REPO001CLIENT: 6.2. updateUI(recordId, state='Approved')
-    deactivate REPO001CLIENT
-
-    note over REPO003DB: This is an asynchronous, event-driven invocation. The supervisor's UI flow is complete and does not wait for this process.
-    REPO003DB-REPO005SVCNOTIFY: 7. onUpdate Trigger (payload: before/after doc state)
-    activate REPO005SVCNOTIFY
-    note over REPO005SVCNOTIFY: The Cloud Function has a built-in retry mechanism for transient failures when sending the notification.
-
-    REPO005SVCNOTIFY-REPO005SVCNOTIFY: 7.1. Parse payload, get subordinate's userId
-
-    REPO005SVCNOTIFY-REPO003DB: 7.2. query(collection: 'users', where: 'userId' == subordinateId)
-    deactivate REPO003DB
-    activate REPO003DB
-
-    REPO003DB--REPO005SVCNOTIFY: 7.3. return {fcmToken: '...token...'}
-    deactivate REPO003DB
-
-    REPO005SVCNOTIFY-REPO005SVCNOTIFY: 7.4. sendPushNotification(fcmToken, 'Your request was approved.')
-
-    deactivate REPO005SVCNOTIFY
+    FlutterMobileApp-FirestoreDB: 3. update(attendanceId, {status:'Approved', approvalDetails:{...}})
+    deactivate FlutterMobileApp
+    activate FirestoreDB
+    
+    note right of FirestoreDB: The trigger is asynchronous. The app UI can update immediately after the write is acknowledged.
+    FirestoreDB-NotificationDispatcher: 4. onUpdate(AttendanceRecord) trigger
+    deactivate FirestoreDB
+    activate NotificationDispatcher
+    
+    NotificationDispatcher-NotificationDispatcher: 4.1. Verify status change and get subordinate's userId
+    
+    NotificationDispatcher-FirestoreDB: 4.2. get(User, subordinate.userId)
+    activate FirestoreDB
+    FirestoreDB--NotificationDispatcher: User document with fcmToken
+    deactivate FirestoreDB
+    
+    NotificationDispatcher-FCMService: 4.3. sendPushNotification(to: fcmToken, payload)
+    activate FCMService
+    deactivate NotificationDispatcher
+    
+    note over FlutterMobileApp: This interaction is with the Subordinate's device instance, not the Supervisor's.
+    FCMService-FlutterMobileApp: 5. pushNotification(payload)
+    deactivate FCMService
+    
+    activate FlutterMobileApp
+    FlutterMobileApp-FlutterMobileApp: 6. Display notification to Subordinate
+    deactivate FlutterMobileApp

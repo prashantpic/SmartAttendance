@@ -1,0 +1,53 @@
+sequenceDiagram
+    actor "User's Browser" as userbrowser
+    participant "Firebase Hosting" as firebasehosting
+    participant "App Check" as firebaseappcheck
+    participant "Tenant Provisioning Function" as tenantprovisioningfn
+    participant "Firebase Authentication" as firebaseauth
+    participant "Firestore Database" as firestoredb
+
+    userbrowser-firebasehosting: 1. GET /register.html
+    activate firebasehosting
+    firebasehosting--userbrowser: Registration Page (HTML/JS)
+    deactivate firebasehosting
+
+    userbrowser-tenantprovisioningfn: 2. HTTPS POST invoke({orgName, userName, email, password})
+    activate tenantprovisioningfn
+    note over userbrowser: User submits form data collected by JavaScript on the page.
+
+    firebaseappcheck-tenantprovisioningfn: 2.1. [Guard] Validate Request Token
+    note left of firebaseappcheck: Request is implicitly validated by App Check before the function executes. An invalid token results in a 403 Forbidden error.
+
+    tenantprovisioningfn-firebaseauth: 2.2. createUser({email, password})
+    activate firebaseauth
+    note right of firebaseauth: Creating the user in Auth first allows us to get a stable UID.
+    firebaseauth--tenantprovisioningfn: userRecord {uid, email}
+    deactivate firebaseauth
+
+    loop 2.3.1 Atomic Firestore Write
+        note right of firestoredb: A batched write ensures all initial Firestore documents are created atomically.
+        tenantprovisioningfn-firestoredb: 2.3.1.1. batch.set(/tenants/{newId}, ...)
+        tenantprovisioningfn-firestoredb: 2.3.1.2. batch.set(/users/{uid}, {role: 'Admin'})
+        tenantprovisioningfn-firestoredb: 2.3.1.3. batch.set(/config/default, ...)
+        tenantprovisioningfn-firestoredb: 2.3.1.4. batch.commit()
+        activate firestoredb
+    end
+
+    alt Success Path
+        firestoredb--tenantprovisioningfn: Commit Success
+        tenantprovisioningfn-firebaseauth: 2.3.2. setCustomUserClaims(uid, {tenantId, role})
+        activate firebaseauth
+        firebaseauth--tenantprovisioningfn: Success
+        deactivate firebaseauth
+    else Error: Firestore Commit Fails
+        firestoredb--tenantprovisioningfn: 2.4.1. Error: Commit Failed
+        note right of tenantprovisioningfn: If Firestore operations fail, the previously created Auth user must be deleted to prevent an inconsistent state.
+        tenantprovisioningfn-firebaseauth: 2.4.2. [Cleanup] deleteUser(uid)
+        activate firebaseauth
+        firebaseauth--tenantprovisioningfn: Success
+        deactivate firebaseauth
+    end
+    deactivate firestoredb
+
+    tenantprovisioningfn--userbrowser: HTTP 200 OK / 4xx/5xx Error
+    deactivate tenantprovisioningfn

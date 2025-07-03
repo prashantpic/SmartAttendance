@@ -1,0 +1,46 @@
+sequenceDiagram
+    actor "Google Cloud Scheduler" as googlecloudscheduler
+    participant "Data Archival Function" as dataarchivalfn
+    participant "Firestore Database" as firestoredb
+    participant "Firebase Storage" as firebasestorage
+
+    googlecloudscheduler-dataarchivalfn: 1. [Scheduled Trigger] Execute Archival Job
+    activate dataarchivalfn
+    note over dataarchivalfn: Function is idempotent; it processes tenants and archives data in a way that can be safely re-run without duplicating archives or incorrectly deleting data.
+
+    dataarchivalfn-firestoredb: 2. getTenants()
+    activate firestoredb
+    firestoredb--dataarchivalfn: [List]
+    deactivate firestoredb
+
+    loop For each tenant in tenantList
+        dataarchivalfn-firestoredb: 3.1. getTenantConfig(tenant.id)
+        activate firestoredb
+        firestoredb--dataarchivalfn: [Config{dataRetentionDays}]
+        deactivate firestoredb
+
+        dataarchivalfn-dataarchivalfn: 3.2. calculateCutoffDate(dataRetentionDays)
+
+        dataarchivalfn-firestoredb: 3.3. queryRecordsToArchive(tenant.id, cutoffDate)
+        activate firestoredb
+        firestoredb--dataarchivalfn: [List]
+        deactivate firestoredb
+
+        alt recordsToArchive.isNotEmpty()
+            dataarchivalfn-dataarchivalfn: 3.4.1. formatRecordsAsNDJSON(records)
+            dataarchivalfn-firebasestorage: 3.4.2. uploadArchiveFile(tenant.id, ndjsonData)
+            activate firebasestorage
+            firebasestorage--dataarchivalfn: [Upload Success]
+            deactivate firebasestorage
+
+            dataarchivalfn-firestoredb: 3.4.3. batchDelete(recordIds)
+            activate firestoredb
+            note right of firestoredb: An atomic batched write is used to ensure all archived records are deleted from Firestore together, preventing partial data purges.
+            firestoredb--dataarchivalfn: [Batch Write Success]
+            deactivate firestoredb
+        else else
+            dataarchivalfn-dataarchivalfn: 3.5.1. log("No records to archive for tenant " + tenant.id)
+        end
+    end
+
+    deactivate dataarchivalfn
