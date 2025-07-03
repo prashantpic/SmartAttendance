@@ -1,0 +1,29 @@
+sequenceDiagram
+    actor "Mobile Client" as REPO001CLIENT
+    participant "Firebase App Check" as REPO016SECURITYAPPCHECK
+    participant "Firestore Database" as REPO003DB
+    REPO001CLIENT-REPO001CLIENT: 1. User action triggers a Firestore write operation
+    activate REPO001CLIENT
+    REPO001CLIENT-REPO016SECURITYAPPCHECK: 2. getAppCheckToken()
+    activate REPO016SECURITYAPPCHECK
+    note over REPO016SECURITYAPPCHECK: The App Check SDK on the client communicates with the platform's attestation provider (e.g., Play Integrity on Android, App Attest on iOS) to get an attestation verdict, which is used to generate the token.
+    REPO016SECURITYAPPCHECK--REPO001CLIENT: App Check Token
+    deactivate REPO016SECURITYAPPCHECK
+    REPO001CLIENT-REPO003DB: 3. write(data, appCheckToken)
+    activate REPO003DB
+    note right of REPO003DB: App Check verification occurs before Firestore Security Rules are evaluated. This provides an initial layer of protection against abusive or unauthorized clients.
+    REPO003DB-REPO016SECURITYAPPCHECK: 3.1. validateToken(appCheckToken)
+    activate REPO016SECURITYAPPCHECK
+    REPO016SECURITYAPPCHECK--REPO003DB: Validation Result
+    deactivate REPO016SECURITYAPPCHECK
+    alt Token is Valid
+        REPO003DB-REPO003DB: 3.2.1. Execute Firestore Security Rules
+        activate REPO003DB
+        REPO003DB--REPO003DB: Rules Pass
+        deactivate REPO003DB
+        REPO003DB-REPO003DB: 3.2.2. Commit write to database
+    else Else, Token is Invalid
+    end
+    REPO003DB--REPO001CLIENT: 4. Success or Error: 'permission-denied'
+    deactivate REPO003DB
+    deactivate REPO001CLIENT

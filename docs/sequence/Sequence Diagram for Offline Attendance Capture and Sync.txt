@@ -1,0 +1,53 @@
+sequenceDiagram
+    actor "User" as useractor
+    participant "Mobile App" as REPO001CLIENT
+    participant "Local DB" as REPO019HIVE
+    participant "Remote DB" as REPO003DB
+
+    useractor-REPO001CLIENT: 1. tapsCheckInButton()
+    activate REPO001CLIENT
+
+    REPO001CLIENT-REPO001CLIENT: 2. checkNetworkStatus()
+    REPO001CLIENT--REPO001CLIENT: isOnline: false
+
+    alt Network is Offline
+        REPO001CLIENT-REPO001CLIENT: 3.1. createAttendancePayload(status: 'Queued')
+        REPO001CLIENT--REPO001CLIENT: attendanceRecord
+
+        REPO001CLIENT-REPO019HIVE: 3.2. saveRecord(attendanceRecord)
+        activate REPO019HIVE
+        REPO019HIVE--REPO001CLIENT: Success
+        deactivate REPO019HIVE
+
+        REPO001CLIENT--useractor: 3.3. displaySuccess('Checked in. Will sync when online.')
+    end
+
+    note over REPO001CLIENT: The app's internal NetworkMonitorService is responsible for detecting connectivity changes and triggering the SyncService.
+    REPO001CLIENT-REPO001CLIENT: 4. event: networkStatusChanged(isOnline: true)
+
+    REPO001CLIENT-REPO019HIVE: 5. getRecordsByStatus('Queued')
+    activate REPO019HIVE
+    REPO019HIVE--REPO001CLIENT: [record1, record2]
+    deactivate REPO019HIVE
+
+    note right of REPO019HIVE: The local record's status transitions from 'Queued' to 'Synced' or 'Failed' based on the outcome of the remote write operation. This prevents duplicate sync attempts.
+    loop For each queued record
+        REPO001CLIENT-REPO003DB: 6.1. writeAttendanceRecord(record)
+        activate REPO003DB
+        REPO003DB--REPO001CLIENT: Success/Failure
+        deactivate REPO003DB
+
+        alt Sync Successful
+            REPO001CLIENT-REPO019HIVE: 6.2.1. updateRecordStatus(record.id, 'Synced')
+            activate REPO019HIVE
+            REPO019HIVE--REPO001CLIENT: Success
+            deactivate REPO019HIVE
+        else Sync Failed
+            REPO001CLIENT-REPO019HIVE: 6.3.1. updateRecordStatus(record.id, 'Failed')
+            activate REPO019HIVE
+            REPO019HIVE--REPO001CLIENT: Success
+            deactivate REPO019HIVE
+        end
+    end
+
+    deactivate REPO001CLIENT

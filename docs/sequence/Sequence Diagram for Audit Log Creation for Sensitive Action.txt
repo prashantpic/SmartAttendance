@@ -1,0 +1,35 @@
+sequenceDiagram
+    actor "Admin User" as Admin
+    participant "Smart Attendance App" as REPO001CLIENT
+    participant "Firebase Firestore" as REPO003DB
+    participant "Audit Log Function" as REPO010SVCAUDIT
+
+    Admin-REPO001CLIENT: 1. Changes user's role to 'Supervisor' and saves
+    activate REPO001CLIENT
+
+    REPO001CLIENT-REPO003DB: 2. update('/tenants/{id}/users/user123', { role: 'Supervisor' })
+    activate REPO003DB
+    note over REPO001CLIENT: The client receives an immediate acknowledgment for its write request. The audit logging process happens asynchronously in the background, decoupled from the client.
+    REPO003DB--REPO001CLIENT: ack(Success/Failure)
+    deactivate REPO001CLIENT
+    deactivate REPO003DB
+
+    REPO003DB-REPO010SVCAUDIT: 3. [Event] onUpdate: /tenants/{id}/users/user123
+    activate REPO010SVCAUDIT
+    note right of REPO010SVCAUDIT: The onUpdate event trigger provides the function with two snapshots of the document: change.before and change.after. This allows the function to compare the data and see what changed.
+
+    REPO010SVCAUDIT-REPO010SVCAUDIT: 3.1. Extracts 'before' and 'after' data snapshots from event
+
+    alt 3.2. Condition: Check if role has changed
+        REPO010SVCAUDIT-REPO010SVCAUDIT: 3.2.1. Constructs audit log payload
+        note right of REPO010SVCAUDIT: The function must determine the actorId (the Admin who made the change). This is typically derived from Cloud Audit Logs or by requiring the client to pass the actor's ID as part of the initial update request.
+        REPO010SVCAUDIT--REPO010SVCAUDIT: auditPayload: { actorId, action, targetId, details }
+
+        REPO010SVCAUDIT-REPO003DB: 3.2.2. create('/tenants/{id}/auditLogs/{logId}', auditPayload)
+        activate REPO003DB
+        note right of REPO010SVCAUDIT: If the write to the auditLogs collection fails, the Cloud Function's execution fails. Firebase will automatically retry the function based on its configuration.
+        REPO003DB--REPO010SVCAUDIT: ack(Success)
+        deactivate REPO003DB
+    end
+
+    deactivate REPO010SVCAUDIT

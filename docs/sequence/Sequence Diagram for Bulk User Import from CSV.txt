@@ -1,0 +1,58 @@
+sequenceDiagram
+    actor "Admin User" as Admin
+    participant "Mobile App" as REPO-001-CLIENT
+    participant "Cloud Storage" as REPO-013-STORAGE
+    participant "Bulk Import Function" as REPO-007-SVC-IMPORT
+    participant "Firebase Auth" as REPO-002-AUTH
+    participant "Firestore DB" as REPO-003-DB
+
+    Admin-REPO-001-CLIENT: 1. Selects CSV file and initiates upload
+    activate REPO-001-CLIENT
+    REPO-001-CLIENT-REPO-013-STORAGE: 2. uploadFile(csvFile, /tenants/{tenantId}/imports/{fileId}.csv)
+    activate REPO-013-STORAGE
+    REPO-013-STORAGE--REPO-001-CLIENT: 3. Upload Success/Failure
+    deactivate REPO-013-STORAGE
+    deactivate REPO-001-CLIENT
+
+    REPO-013-STORAGE-REPO-007-SVC-IMPORT: 4. [onFinalize Trigger] Asynchronously invokes function with file metadata
+    activate REPO-007-SVC-IMPORT
+    note over REPO-007-SVC-IMPORT: Function execution is asynchronous. The Admin is notified of completion out-of-band (e.g., via FCM Push Notification or by checking the app).
+
+    note right of REPO-007-SVC-IMPORT: The function must be idempotent. It should check if the import report for a given file already exists to prevent reprocessing on accidental re-triggering.
+    REPO-007-SVC-IMPORT-REPO-013-STORAGE: 5. downloadFile(filePath)
+    activate REPO-013-STORAGE
+    REPO-013-STORAGE--REPO-007-SVC-IMPORT: 6. CSV File Content
+    deactivate REPO-013-STORAGE
+
+    loop 7. Loop for each row in CSV
+        alt 7.1 Alt: [Row data is valid]
+            REPO-007-SVC-IMPORT-REPO-002-AUTH: 7.1.1. createUser({email, password})
+            activate REPO-002-AUTH
+            REPO-002-AUTH--REPO-007-SVC-IMPORT: 7.1.2. AuthUserRecord (uid)
+            deactivate REPO-002-AUTH
+            REPO-007-SVC-IMPORT-REPO-003-DB: 7.1.3. setDoc(/users/{uid}, {status: 'Invited', ...})
+            activate REPO-003-DB
+            REPO-003-DB--REPO-007-SVC-IMPORT: 7.1.4. Write Ack
+            deactivate REPO-003-DB
+            REPO-007-SVC-IMPORT-REPO-007-SVC-IMPORT: 7.1.5. Add user to map for hierarchy processing and increment success count
+        else 7.2 Else: [Row data is invalid]
+            REPO-007-SVC-IMPORT-REPO-007-SVC-IMPORT: 7.2.1. Log row error and increment failure count
+        end
+    end
+
+    note over REPO-007-SVC-IMPORT: Hierarchy is built after all users are created to ensure supervisor UIDs are available for assignment.
+    loop 8. Loop for each successfully created user to build hierarchy
+        REPO-007-SVC-IMPORT-REPO-003-DB: 8.1. updateDoc(/users/{userId}, {supervisorId: ...})
+        activate REPO-003-DB
+        REPO-003-DB--REPO-007-SVC-IMPORT: 8.2. Write Ack
+        deactivate REPO-003-DB
+    end
+
+    REPO-007-SVC-IMPORT-REPO-007-SVC-IMPORT: 9. Generate validation report content (success/failure counts, error details)
+
+    REPO-007-SVC-IMPORT-REPO-013-STORAGE: 10. uploadFile(report.json, /tenants/{tenantId}/imports/results/{fileId}_report.json)
+    activate REPO-013-STORAGE
+    REPO-013-STORAGE--REPO-007-SVC-IMPORT: 11. Upload Success
+    deactivate REPO-013-STORAGE
+
+    deactivate REPO-007-SVC-IMPORT

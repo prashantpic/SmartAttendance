@@ -1,0 +1,1269 @@
+# Specification
+
+# 1. Database Design
+
+## 1.1. Tenant
+Represents a single organization or company, serving as the top-level container for all its data in the multi-tenant architecture. Stored as a root-level collection document.
+
+### 1.1.3. Attributes
+
+### 1.1.3.1. tenantId
+Globally unique identifier for the tenant. Used as the document ID in the 'tenants' collection.
+
+#### 1.1.3.1.2. Type
+String
+
+#### 1.1.3.1.3. Is Required
+True
+
+#### 1.1.3.1.4. Is Primary Key
+True
+
+#### 1.1.3.1.5. Is Unique
+True
+
+### 1.1.3.2. organizationName
+The legal or display name of the organization.
+
+#### 1.1.3.2.2. Type
+String
+
+#### 1.1.3.2.3. Is Required
+True
+
+#### 1.1.3.2.4. Size
+255
+
+### 1.1.3.3. createdAt
+Timestamp of when the tenant was created (server timestamp).
+
+#### 1.1.3.3.2. Type
+DateTime
+
+#### 1.1.3.3.3. Is Required
+True
+
+### 1.1.3.4. updatedAt
+Timestamp of the last update to the tenant's record (server timestamp).
+
+#### 1.1.3.4.2. Type
+DateTime
+
+#### 1.1.3.4.3. Is Required
+True
+
+
+### 1.1.4. Primary Keys
+
+- tenantId
+
+### 1.1.5. Unique Constraints
+
+
+### 1.1.6. Indexes
+
+
+## 1.2. User
+Represents an individual user account within a specific tenant. Stored in a subcollection: /tenants/{tenantId}/users/{userId}.
+
+### 1.2.3. Attributes
+
+### 1.2.3.1. userId
+Unique identifier for the user, typically the UID from Firebase Authentication. Used as the document ID.
+
+#### 1.2.3.1.2. Type
+String
+
+#### 1.2.3.1.3. Is Required
+True
+
+#### 1.2.3.1.4. Is Primary Key
+True
+
+#### 1.2.3.1.5. Is Unique
+True
+
+### 1.2.3.2. tenantId
+Foreign key linking the user to their Tenant. This attribute is essential for data partitioning and security rules. Cached in Firebase Auth Custom Claims for fast, secure access.
+
+#### 1.2.3.2.2. Type
+String
+
+#### 1.2.3.2.3. Is Required
+True
+
+#### 1.2.3.2.4. Is Foreign Key
+True
+
+### 1.2.3.3. name
+Full name of the user.
+
+#### 1.2.3.3.2. Type
+String
+
+#### 1.2.3.3.3. Is Required
+True
+
+#### 1.2.3.3.4. Size
+255
+
+### 1.2.3.4. email
+User's email address. Uniqueness is enforced at the tenant level via application logic and potentially a composite index (tenantId, email) if required for server-side lookups, though client-side validation and Auth email uniqueness usually suffice.
+
+#### 1.2.3.4.2. Type
+String
+
+#### 1.2.3.4.3. Is Required
+True
+
+#### 1.2.3.4.4. Is Unique
+False
+
+#### 1.2.3.4.5. Size
+255
+
+#### 1.2.3.4.6. Constraints
+
+- EMAIL_FORMAT
+
+### 1.2.3.5. phoneNumber
+User's phone number, used for phone-based authentication. Stored securely if used.
+
+#### 1.2.3.5.2. Type
+String
+
+#### 1.2.3.5.3. Is Required
+False
+
+#### 1.2.3.5.4. Size
+50
+
+### 1.2.3.6. role
+The user's role within the organization. Cached in Firebase Auth Custom Claims for fast access control and security rules.
+
+#### 1.2.3.6.2. Type
+String
+
+#### 1.2.3.6.3. Is Required
+True
+
+#### 1.2.3.6.4. Size
+50
+
+#### 1.2.3.6.5. Constraints
+
+- ENUM('Admin', 'Supervisor', 'Subordinate')
+
+### 1.2.3.7. status
+The current status of the user account. Cached in Firebase Auth Custom Claims for fast access control and security rules.
+
+#### 1.2.3.7.2. Type
+String
+
+#### 1.2.3.7.3. Is Required
+True
+
+#### 1.2.3.7.4. Size
+50
+
+#### 1.2.3.7.5. Constraints
+
+- ENUM('Active', 'Invited', 'Deactivated')
+
+#### 1.2.3.7.6. Default Value
+Invited
+
+### 1.2.3.8. supervisorId
+Foreign key linking to another User who is the supervisor within the same tenant. Self-referencing relationship.
+
+#### 1.2.3.8.2. Type
+String
+
+#### 1.2.3.8.3. Is Required
+False
+
+#### 1.2.3.8.4. Is Foreign Key
+True
+
+### 1.2.3.9. subordinateIds
+Denormalized array of direct subordinate user IDs under this supervisor. Maintained by a Cloud Function triggered by supervisorId changes. Only applicable for 'Supervisor' or 'Admin' roles. Null for 'Subordinate' roles. Used for efficient retrieval of direct reports.
+
+#### 1.2.3.9.2. Type
+Array<String>
+
+#### 1.2.3.9.3. Is Required
+False
+
+### 1.2.3.10. fcmToken
+Firebase Cloud Messaging token for push notifications. Should be updated periodically.
+
+#### 1.2.3.10.2. Type
+String
+
+#### 1.2.3.10.3. Is Required
+False
+
+### 1.2.3.11. lastLoginTimestamp
+Timestamp of the user's last successful login (server timestamp).
+
+#### 1.2.3.11.2. Type
+DateTime
+
+#### 1.2.3.11.3. Is Required
+False
+
+### 1.2.3.12. createdAt
+Timestamp of when the user was created (server timestamp).
+
+#### 1.2.3.12.2. Type
+DateTime
+
+#### 1.2.3.12.3. Is Required
+True
+
+### 1.2.3.13. updatedAt
+Timestamp of the last update to the user's record (server timestamp).
+
+#### 1.2.3.13.2. Type
+DateTime
+
+#### 1.2.3.13.3. Is Required
+True
+
+
+### 1.2.4. Primary Keys
+
+- userId
+
+### 1.2.5. Unique Constraints
+
+### 1.2.5.1. uq_user_tenant_email
+#### 1.2.5.1.2. Columns
+
+- tenantId
+- email
+
+#### 1.2.5.1.3. Notes
+Enforced via application logic and server-side validation.
+
+
+### 1.2.6. Indexes
+
+
+## 1.3. Attendance
+Stores a single attendance event, including check-in and check-out data. Stored in a subcollection: /tenants/{tenantId}/attendance/{attendanceId}.
+
+### 1.3.3. Retention Policy
+
+- **Based On:** TenantConfig.dataRetentionDays
+- **Action:** Archive to Firebase Storage (NDJSON) and Purge from Firestore
+- **Mechanism:** Scheduled Cloud Function
+
+### 1.3.4. Attributes
+
+### 1.3.4.1. attendanceId
+Client-generated UUID used as the Firestore document ID. New records should be written using a `set()` or `add()` operation on the client and validated on the server. Using a client-generated ID simplifies offline sync idempotency.
+
+#### 1.3.4.1.2. Type
+String
+
+#### 1.3.4.1.3. Is Required
+True
+
+#### 1.3.4.1.4. Is Primary Key
+True
+
+#### 1.3.4.1.5. Is Unique
+True
+
+### 1.3.4.2. tenantId
+Foreign key linking the record to its Tenant. Essential for data partitioning and security rules.
+
+#### 1.3.4.2.2. Type
+String
+
+#### 1.3.4.2.3. Is Required
+True
+
+#### 1.3.4.2.4. Is Foreign Key
+True
+
+### 1.3.4.3. userId
+Foreign key linking the record to the User who created it.
+
+#### 1.3.4.3.2. Type
+String
+
+#### 1.3.4.3.3. Is Required
+True
+
+#### 1.3.4.3.4. Is Foreign Key
+True
+
+### 1.3.4.4. userName
+Denormalized full name of the user for performance, avoiding lookups in supervisor list views or reports.
+
+#### 1.3.4.4.2. Type
+String
+
+#### 1.3.4.4.3. Size
+255
+
+#### 1.3.4.4.4. Is Required
+True
+
+### 1.3.4.5. eventId
+Optional foreign key linking the attendance to a specific Event.
+
+#### 1.3.4.5.2. Type
+String
+
+#### 1.3.4.5.3. Is Required
+False
+
+#### 1.3.4.5.4. Is Foreign Key
+True
+
+### 1.3.4.6. clientCheckInTimestamp
+Timestamp from the client device at the moment of check-in.
+
+#### 1.3.4.6.2. Type
+DateTime
+
+#### 1.3.4.6.3. Is Required
+True
+
+### 1.3.4.7. clientCheckOutTimestamp
+Timestamp from the client device at the moment of check-out. Must be after clientCheckInTimestamp if present.
+
+#### 1.3.4.7.2. Type
+DateTime
+
+#### 1.3.4.7.3. Is Required
+False
+
+### 1.3.4.8. serverSyncTimestamp
+Timestamp from the server when the record was first synced to Firestore.
+
+#### 1.3.4.8.2. Type
+DateTime
+
+#### 1.3.4.8.3. Is Required
+True
+
+### 1.3.4.9. checkInLocation
+GeoPoint data for the check-in location (latitude, longitude).
+
+#### 1.3.4.9.2. Type
+GeoPoint
+
+#### 1.3.4.9.3. Is Required
+True
+
+### 1.3.4.10. checkOutLocation
+GeoPoint data for the check-out location (latitude, longitude).
+
+#### 1.3.4.10.2. Type
+GeoPoint
+
+#### 1.3.4.10.3. Is Required
+False
+
+### 1.3.4.11. checkInAccuracy
+GPS location accuracy in meters for the check-in.
+
+#### 1.3.4.11.2. Type
+Number
+
+#### 1.3.4.11.3. Precision
+10
+
+#### 1.3.4.11.4. Scale
+2
+
+#### 1.3.4.11.5. Is Required
+True
+
+### 1.3.4.12. checkOutAccuracy
+GPS location accuracy in meters for the check-out.
+
+#### 1.3.4.12.2. Type
+Number
+
+#### 1.3.4.12.3. Precision
+10
+
+#### 1.3.4.12.4. Scale
+2
+
+#### 1.3.4.12.5. Is Required
+False
+
+### 1.3.4.13. checkInAddress
+Reverse-geocoded address string for the check-in location. Populated by a Cloud Function.
+
+#### 1.3.4.13.2. Type
+String
+
+#### 1.3.4.13.3. Is Required
+False
+
+### 1.3.4.14. checkOutAddress
+Reverse-geocoded address string for the check-out location. Populated by a Cloud Function.
+
+#### 1.3.4.14.2. Type
+String
+
+#### 1.3.4.14.3. Is Required
+False
+
+### 1.3.4.15. status
+The approval status of the attendance record.
+
+#### 1.3.4.15.2. Type
+String
+
+#### 1.3.4.15.3. Is Required
+True
+
+#### 1.3.4.15.4. Size
+50
+
+#### 1.3.4.15.5. Constraints
+
+- ENUM('Pending', 'Approved', 'Rejected')
+
+#### 1.3.4.15.6. Default Value
+Pending
+
+### 1.3.4.16. syncStatus
+The synchronization status for offline-created records. 'Queued' is a client-side status, 'Synced'/'Failed' are server-side confirmed statuses.
+
+#### 1.3.4.16.2. Type
+String
+
+#### 1.3.4.16.3. Is Required
+True
+
+#### 1.3.4.16.4. Size
+50
+
+#### 1.3.4.16.5. Constraints
+
+- ENUM('Queued', 'Synced', 'Failed')
+
+### 1.3.4.17. isOutsideGeofence
+Flag indicating if the check-in occurred outside the tenant's configured geofence.
+
+#### 1.3.4.17.2. Type
+Boolean
+
+#### 1.3.4.17.3. Is Required
+True
+
+#### 1.3.4.17.4. Default Value
+false
+
+### 1.3.4.18. deviceInfo
+Map object containing client device details (e.g., appVersion, os, model).
+
+#### 1.3.4.18.2. Type
+Map
+
+#### 1.3.4.18.3. Is Required
+True
+
+### 1.3.4.19. approvalDetails
+Map object storing details of the approval action (approverId: String, timestamp: DateTime, comments: String).
+
+#### 1.3.4.19.2. Type
+Map
+
+#### 1.3.4.19.3. Is Required
+False
+
+### 1.3.4.20. approverHierarchy
+Array of user IDs representing the full supervisory chain for this record's user, ordered from closest supervisor up to Admin. Populated by a Cloud Function on record creation/user supervisor change. Used for efficient supervisor dashboard queries.
+
+#### 1.3.4.20.2. Type
+Array<String>
+
+#### 1.3.4.20.3. Is Required
+True
+
+
+### 1.3.5. Primary Keys
+
+- attendanceId
+
+### 1.3.6. Unique Constraints
+
+
+### 1.3.7. Indexes
+
+### 1.3.7.1. idx_attendance_approval_query
+#### 1.3.7.1.2. Columns
+
+- approverHierarchy
+- status
+- clientCheckInTimestamp
+
+#### 1.3.7.1.3. Sort Order
+
+- ASC
+- ASC
+- DESC
+
+#### 1.3.7.1.4. Type
+Composite
+
+#### 1.3.7.1.5. Notes
+Optimizes supervisor dashboard queries for pending approvals across their hierarchy.
+
+### 1.3.7.2. idx_attendance_user_timestamp
+#### 1.3.7.2.2. Columns
+
+- userId
+- clientCheckInTimestamp
+
+#### 1.3.7.2.3. Sort Order
+
+- ASC
+- DESC
+
+#### 1.3.7.2.4. Type
+Composite
+
+#### 1.3.7.2.5. Notes
+Optimizes subordinate queries for viewing their own attendance history.
+
+### 1.3.7.3. idx_attendance_tenant_timestamp
+#### 1.3.7.3.2. Columns
+
+- tenantId
+- clientCheckInTimestamp
+
+#### 1.3.7.3.3. Sort Order
+
+- ASC
+- DESC
+
+#### 1.3.7.3.4. Type
+Composite
+
+#### 1.3.7.3.5. Notes
+Supports Admin queries for all tenant attendance records, enabling efficient reporting and archival.
+
+### 1.3.7.4. idx_attendance_event
+#### 1.3.7.4.2. Columns
+
+- eventId
+- clientCheckInTimestamp
+
+#### 1.3.7.4.3. Sort Order
+
+- ASC
+- DESC
+
+#### 1.3.7.4.4. Type
+Composite
+
+#### 1.3.7.4.5. Notes
+Optimizes queries to find attendance records linked to a specific event.
+
+
+## 1.4. Event
+Represents a scheduled event or task that can be assigned to users. Stored in a subcollection: /tenants/{tenantId}/events/{eventId}.
+
+### 1.4.3. Attributes
+
+### 1.4.3.1. eventId
+Unique identifier for the event. Used as the document ID.
+
+#### 1.4.3.1.2. Type
+String
+
+#### 1.4.3.1.3. Is Required
+True
+
+#### 1.4.3.1.4. Is Primary Key
+True
+
+#### 1.4.3.1.5. Is Unique
+True
+
+### 1.4.3.2. tenantId
+Foreign key linking the event to its Tenant. Essential for data partitioning and security rules.
+
+#### 1.4.3.2.2. Type
+String
+
+#### 1.4.3.2.3. Is Required
+True
+
+#### 1.4.3.2.4. Is Foreign Key
+True
+
+### 1.4.3.3. title
+The title or name of the event.
+
+#### 1.4.3.3.2. Type
+String
+
+#### 1.4.3.3.3. Is Required
+True
+
+#### 1.4.3.3.4. Size
+255
+
+### 1.4.3.4. description
+A detailed description of the event.
+
+#### 1.4.3.4.2. Type
+String
+
+#### 1.4.3.4.3. Is Required
+False
+
+### 1.4.3.5. eventDate
+The date and time the event is scheduled for.
+
+#### 1.4.3.5.2. Type
+DateTime
+
+#### 1.4.3.5.3. Is Required
+True
+
+### 1.4.3.6. assignedTo
+Array of user IDs to whom this event is assigned. Used to query events assigned to a specific user.
+
+#### 1.4.3.6.2. Type
+Array<String>
+
+#### 1.4.3.6.3. Is Required
+True
+
+### 1.4.3.7. createdBy
+Foreign key linking to the User (Supervisor or Admin) who created the event.
+
+#### 1.4.3.7.2. Type
+String
+
+#### 1.4.3.7.3. Is Required
+True
+
+#### 1.4.3.7.4. Is Foreign Key
+True
+
+### 1.4.3.8. createdAt
+Timestamp of when the event was created (server timestamp).
+
+#### 1.4.3.8.2. Type
+DateTime
+
+#### 1.4.3.8.3. Is Required
+True
+
+### 1.4.3.9. updatedAt
+Timestamp of the last update to the event (server timestamp).
+
+#### 1.4.3.9.2. Type
+DateTime
+
+#### 1.4.3.9.3. Is Required
+True
+
+
+### 1.4.4. Primary Keys
+
+- eventId
+
+### 1.4.5. Unique Constraints
+
+
+### 1.4.6. Indexes
+
+### 1.4.6.1. idx_event_assignment_date
+#### 1.4.6.1.2. Columns
+
+- assignedTo
+- eventDate
+
+#### 1.4.6.1.3. Sort Order
+
+- ASC
+- DESC
+
+#### 1.4.6.1.4. Type
+Composite
+
+#### 1.4.6.1.5. Notes
+Supports array-contains queries on 'assignedTo' combined with date filtering for efficient user calendar views.
+
+### 1.4.6.2. idx_event_tenant_date
+#### 1.4.6.2.2. Columns
+
+- tenantId
+- eventDate
+
+#### 1.4.6.2.3. Sort Order
+
+- ASC
+- DESC
+
+#### 1.4.6.2.4. Type
+Composite
+
+#### 1.4.6.2.5. Notes
+Supports admin/supervisor queries for events within a tenant by date.
+
+
+## 1.5. TenantConfig
+Stores tenant-specific configuration settings. One-to-one relationship with Tenant. Stored as a document in a subcollection: /tenants/{tenantId}/config/{configId}. This configuration data should be fetched on client login, cached for the session, and subscribed to for real-time updates to reduce database reads.
+
+### 1.5.3. Attributes
+
+### 1.5.3.1. configId
+Unique identifier for the configuration record. Typically the same as tenantId or a fixed ID like 'default'. Used as the document ID.
+
+#### 1.5.3.1.2. Type
+String
+
+#### 1.5.3.1.3. Is Required
+True
+
+#### 1.5.3.1.4. Is Primary Key
+True
+
+#### 1.5.3.1.5. Is Unique
+True
+
+### 1.5.3.2. tenantId
+Foreign key linking the config to its Tenant. Enforces the one-to-one relationship.
+
+#### 1.5.3.2.2. Type
+String
+
+#### 1.5.3.2.3. Is Required
+True
+
+#### 1.5.3.2.4. Is Foreign Key
+True
+
+#### 1.5.3.2.5. Is Unique
+True
+
+### 1.5.3.3. dataRetentionDays
+Number of days to retain active attendance records before archival.
+
+#### 1.5.3.3.2. Type
+Number
+
+#### 1.5.3.3.3. Is Required
+True
+
+#### 1.5.3.3.4. Default Value
+365
+
+#### 1.5.3.3.5. Constraints
+
+- RANGE(90, 730)
+
+### 1.5.3.4. approvalLevels
+Number of supervisory approval levels required for an attendance record.
+
+#### 1.5.3.4.2. Type
+Number
+
+#### 1.5.3.4.3. Is Required
+True
+
+#### 1.5.3.4.4. Default Value
+1
+
+#### 1.5.3.4.5. Constraints
+
+- RANGE(1, 3)
+
+### 1.5.3.5. timezone
+The tenant's primary timezone in IANA format (e.g., 'America/New_York'). Used for timestamp interpretation and reporting.
+
+#### 1.5.3.5.2. Type
+String
+
+#### 1.5.3.5.3. Is Required
+True
+
+#### 1.5.3.5.4. Size
+100
+
+### 1.5.3.6. geofence
+Map object defining the geofence. e.g., {"center": {"latitude": 40.7, "longitude": -74.0}, "radius": 500}. Radius is in meters.
+
+#### 1.5.3.6.2. Type
+Map
+
+#### 1.5.3.6.3. Is Required
+False
+
+### 1.5.3.7. workingHours
+Map object defining the standard working hours for the tenant.
+
+#### 1.5.3.7.2. Type
+Map
+
+#### 1.5.3.7.3. Is Required
+False
+
+### 1.5.3.8. createdAt
+Timestamp of when the config was created (server timestamp).
+
+#### 1.5.3.8.2. Type
+DateTime
+
+#### 1.5.3.8.3. Is Required
+True
+
+### 1.5.3.9. updatedAt
+Timestamp of the last update to the config (server timestamp).
+
+#### 1.5.3.9.2. Type
+DateTime
+
+#### 1.5.3.9.3. Is Required
+True
+
+
+### 1.5.4. Primary Keys
+
+- configId
+
+### 1.5.5. Unique Constraints
+
+### 1.5.5.1. uq_tenantconfig_tenant
+#### 1.5.5.1.2. Columns
+
+- tenantId
+
+#### 1.5.5.1.3. Notes
+Enforces the one-to-one relationship.
+
+
+### 1.5.6. Indexes
+
+
+## 1.6. LinkedSheet
+Stores metadata for a Google Sheet linked by a tenant for data export. Stored in a subcollection: /tenants/{tenantId}/linkedSheets/{linkedSheetId}.
+
+### 1.6.3. Attributes
+
+### 1.6.3.1. linkedSheetId
+Unique identifier for the linked sheet record. Used as the document ID.
+
+#### 1.6.3.1.2. Type
+String
+
+#### 1.6.3.1.3. Is Required
+True
+
+#### 1.6.3.1.4. Is Primary Key
+True
+
+#### 1.6.3.1.5. Is Unique
+True
+
+### 1.6.3.2. tenantId
+Foreign key linking the sheet to its Tenant. Essential for data partitioning and security rules.
+
+#### 1.6.3.2.2. Type
+String
+
+#### 1.6.3.2.3. Is Required
+True
+
+#### 1.6.3.2.4. Is Foreign Key
+True
+
+### 1.6.3.3. fileId
+The file ID of the linked Google Sheet.
+
+#### 1.6.3.3.2. Type
+String
+
+#### 1.6.3.3.3. Is Required
+True
+
+#### 1.6.3.3.4. Size
+255
+
+### 1.6.3.4. ownerEmail
+Email of the user (Admin) who authorized the Google Sheet integration. Used for context and re-auth prompts.
+
+#### 1.6.3.4.2. Type
+String
+
+#### 1.6.3.4.3. Is Required
+True
+
+#### 1.6.3.4.4. Size
+255
+
+### 1.6.3.5. lastSyncStatus
+The status of the last synchronization attempt.
+
+#### 1.6.3.5.2. Type
+String
+
+#### 1.6.3.5.3. Is Required
+True
+
+#### 1.6.3.5.4. Size
+50
+
+#### 1.6.3.5.5. Constraints
+
+- ENUM('Success', 'Failed', 'In Progress', 'Not Started')
+
+#### 1.6.3.5.6. Default Value
+Not Started
+
+### 1.6.3.6. lastSyncTimestamp
+Timestamp of the last successful synchronization.
+
+#### 1.6.3.6.2. Type
+DateTime
+
+#### 1.6.3.6.3. Is Required
+False
+
+### 1.6.3.7. lastSyncError
+Detailed error message from the last failed synchronization attempt.
+
+#### 1.6.3.7.2. Type
+String
+
+#### 1.6.3.7.3. Is Required
+False
+
+### 1.6.3.8. createdAt
+Timestamp of when the sheet was linked (server timestamp).
+
+#### 1.6.3.8.2. Type
+DateTime
+
+#### 1.6.3.8.3. Is Required
+True
+
+### 1.6.3.9. updatedAt
+Timestamp of the last update to this record (server timestamp).
+
+#### 1.6.3.9.2. Type
+DateTime
+
+#### 1.6.3.9.3. Is Required
+True
+
+
+### 1.6.4. Primary Keys
+
+- linkedSheetId
+
+### 1.6.5. Unique Constraints
+
+
+### 1.6.6. Indexes
+
+### 1.6.6.1. idx_linkedsheet_tenant_status
+#### 1.6.6.1.2. Columns
+
+- tenantId
+- lastSyncStatus
+
+#### 1.6.6.1.3. Type
+Composite
+
+#### 1.6.6.1.4. Notes
+Optimizes queries to find linked sheets for a tenant, particularly filtering by status (e.g., Failed).
+
+
+## 1.7. AuditLog
+An immutable log of critical, security-sensitive actions performed within a tenant. Stored in time-partitioned subcollections: /tenants/{tenantId}/auditLogs_YYYY_MM/{logId}. This strategy manages data growth and simplifies archival/purging.
+
+### 1.7.3. Partitioning
+
+- **Strategy:** Time-based Collection Partitioning
+- **Period:** Monthly
+- **Pattern:** auditLogs_YYYY_MM
+- **Notes:** Each month's logs for a tenant reside in a distinct collection under their tenantId.
+
+### 1.7.4. Attributes
+
+### 1.7.4.1. logId
+Unique identifier for the audit log entry. Typically a server-generated UUID. Used as the document ID.
+
+#### 1.7.4.1.2. Type
+String
+
+#### 1.7.4.1.3. Is Required
+True
+
+#### 1.7.4.1.4. Is Primary Key
+True
+
+#### 1.7.4.1.5. Is Unique
+True
+
+### 1.7.4.2. tenantId
+Foreign key linking the log entry to its Tenant. Essential for data partitioning and security rules. Part of the collection path.
+
+#### 1.7.4.2.2. Type
+String
+
+#### 1.7.4.2.3. Is Required
+True
+
+#### 1.7.4.2.4. Is Foreign Key
+True
+
+### 1.7.4.3. timestamp
+The server timestamp when the action occurred. Used for ordering and filtering logs.
+
+#### 1.7.4.3.2. Type
+DateTime
+
+#### 1.7.4.3.3. Is Required
+True
+
+### 1.7.4.4. actorId
+Foreign key linking to the User who performed the action.
+
+#### 1.7.4.4.2. Type
+String
+
+#### 1.7.4.4.3. Is Required
+True
+
+#### 1.7.4.4.4. Is Foreign Key
+True
+
+### 1.7.4.5. action
+A string identifying the type of action (e.g., 'USER_DEACTIVATED', 'ROLE_CHANGED', 'CONFIG_UPDATED', 'SHEET_LINKED').
+
+#### 1.7.4.5.2. Type
+String
+
+#### 1.7.4.5.3. Is Required
+True
+
+#### 1.7.4.5.4. Size
+100
+
+### 1.7.4.6. targetId
+The ID of the entity that was affected by the action (e.g., a userId, sheetId). Optional depending on action.
+
+#### 1.7.4.6.2. Type
+String
+
+#### 1.7.4.6.3. Is Required
+False
+
+#### 1.7.4.6.4. Size
+255
+
+### 1.7.4.7. details
+Map object containing relevant data about the event, such as old and new values, or additional context.
+
+#### 1.7.4.7.2. Type
+Map
+
+#### 1.7.4.7.3. Is Required
+False
+
+
+### 1.7.5. Primary Keys
+
+- logId
+
+### 1.7.6. Unique Constraints
+
+
+### 1.7.7. Indexes
+
+### 1.7.7.1. idx_auditlog_tenant_timestamp
+#### 1.7.7.1.2. Columns
+
+- tenantId
+- timestamp
+
+#### 1.7.7.1.3. Sort Order
+
+- ASC
+- DESC
+
+#### 1.7.7.1.4. Type
+Composite
+
+#### 1.7.7.1.5. Notes
+Optimizes queries within a partitioned collection to retrieve logs for a tenant ordered by time.
+
+
+## 1.8. UserLegalAcceptance
+Tracks a user's acceptance of legal documents like Terms of Service and Privacy Policy. Stored as a document in a subcollection: /tenants/{tenantId}/userLegalAcceptance/{acceptanceId}. One-to-one relationship with User.
+
+### 1.8.3. Attributes
+
+### 1.8.3.1. acceptanceId
+Unique identifier for the acceptance record. Typically the same as the userId. Used as the document ID.
+
+#### 1.8.3.1.2. Type
+String
+
+#### 1.8.3.1.3. Is Required
+True
+
+#### 1.8.3.1.4. Is Primary Key
+True
+
+#### 1.8.3.1.5. Is Unique
+True
+
+### 1.8.3.2. userId
+Foreign key linking to the User. Enforces the one-to-one relationship.
+
+#### 1.8.3.2.2. Type
+String
+
+#### 1.8.3.2.3. Is Required
+True
+
+#### 1.8.3.2.4. Is Foreign Key
+True
+
+#### 1.8.3.2.5. Is Unique
+True
+
+### 1.8.3.3. tenantId
+Foreign key for data partitioning and security rules.
+
+#### 1.8.3.3.2. Type
+String
+
+#### 1.8.3.3.3. Is Required
+True
+
+#### 1.8.3.3.4. Is Foreign Key
+True
+
+### 1.8.3.4. tosAcceptedAt
+Timestamp when the user accepted the Terms of Service.
+
+#### 1.8.3.4.2. Type
+DateTime
+
+#### 1.8.3.4.3. Is Required
+False
+
+### 1.8.3.5. privacyPolicyAcceptedAt
+Timestamp when the user accepted the Privacy Policy.
+
+#### 1.8.3.5.2. Type
+DateTime
+
+#### 1.8.3.5.3. Is Required
+False
+
+
+### 1.8.4. Primary Keys
+
+- acceptanceId
+
+### 1.8.5. Unique Constraints
+
+### 1.8.5.1. uq_userlegal_user
+#### 1.8.5.1.2. Columns
+
+- userId
+
+#### 1.8.5.1.3. Notes
+Enforces the one-to-one relationship.
+
+
+### 1.8.6. Indexes
+
+
+
+
+---
+
+# 2. Diagrams
+
+- **Diagram_Title:** Smart Attendance App Firestore ER Diagram  
+**Diagram_Area:** Core Database Schema  
+**Explanation:** Entity-Relationship diagram illustrating the core collections (entities) and their relationships in the Smart Attendance App Firestore database.
+Relationships are derived from foreign keys (FK), document references, subcollections, and conceptual links like Many-to-Many event assignments.
+Primary keys (PK) and foreign keys are indicated in the entity definitions.  
+**Mermaid_Text:** erDiagram
+    Tenant {
+        String tenantId PK
+    }
+
+    User {
+        String userId PK
+        String tenantId FK
+        String supervisorId FK
+    }
+
+    Attendance {
+        String attendanceId PK
+        String tenantId FK
+        String userId FK
+        String eventId FK
+    }
+
+    Event {
+        String eventId PK
+        String tenantId FK
+        String createdBy FK
+        Array<String> assignedTo
+    }
+
+    TenantConfig {
+        String configId PK
+        String tenantId FK
+    }
+
+    LinkedSheet {
+        String linkedSheetId PK
+        String tenantId FK
+    }
+
+    AuditLog {
+        String logId PK
+        String tenantId FK
+        String actorId FK
+    }
+
+    UserLegalAcceptance {
+        String acceptanceId PK
+        String userId FK
+        String tenantId FK
+    }
+
+    Tenant ||--o{ User : owns
+    User ||--o{ User : supervises
+    Tenant ||--o{ Attendance : owns
+    User ||--o{ Attendance : records
+    Event |o--o{ Attendance : applies_to
+    Tenant ||--o{ Event : owns
+    User ||--o{ Event : creates
+    Event }--{ User : assigned_to
+    Tenant ||--|| TenantConfig : configures
+    Tenant ||--o{ LinkedSheet : links
+    Tenant ||--o{ AuditLog : logs
+    User ||--o{ AuditLog : performs
+    User ||--|| UserLegalAcceptance : accepts
+  
+
+
+---
+

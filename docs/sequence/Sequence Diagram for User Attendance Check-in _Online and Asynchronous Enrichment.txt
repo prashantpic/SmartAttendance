@@ -1,0 +1,70 @@
+sequenceDiagram
+    actor "Subordinate's App" as REPO001CLIENT
+    participant "Firebase App Check" as REPO016SECURITYAPPCHECK
+    participant "Firebase Firestore" as REPO003DB
+    participant "Attendance Processing" as REPO004SVCPROCESS
+    participant "Google Maps API" as REPO015EXTGMAPS
+    participant "Notification Service" as REPO005SVCNOTIFY
+
+    REPO001CLIENT-REPO001CLIENT: 1. User taps 'Check-in'
+    activate REPO001CLIENT
+
+    REPO001CLIENT-REPO001CLIENT: 2. captureGpsLocationAndTimestamp()
+
+    alt 3.1 [App Check Passed]
+        REPO001CLIENT-REPO016SECURITYAPPCHECK: 3.1.1 write(attendanceRecord)
+        activate REPO016SECURITYAPPCHECK
+        REPO016SECURITYAPPCHECK-REPO003DB: 3.1.2 write(attendanceRecord)
+        activate REPO003DB
+        REPO003DB--REPO016SECURITYAPPCHECK: Success Ack
+        deactivate REPO003DB
+        REPO016SECURITYAPPCHECK--REPO001CLIENT: write() forwarded
+        deactivate REPO016SECURITYAPPCHECK
+
+        REPO003DB--REPO001CLIENT: 3.1.3 Write Successful
+        note over REPO001CLIENT: Client receives immediate confirmation after the initial write. All subsequent processing is asynchronous.
+
+        REPO003DB-REPO004SVCPROCESS: 3.1.4 [EVENT] onCreate(attendanceRecord)
+        activate REPO004SVCPROCESS
+        note right of REPO003DB: The Processing and Notification functions are invoked in parallel by the Firestore trigger.
+
+        REPO004SVCPROCESS-REPO015EXTGMAPS: 3.1.4.1 reverseGeocode(checkInLocation)
+        activate REPO015EXTGMAPS
+        note right of REPO004SVCPROCESS: If the Google Maps API fails, the function gracefully continues and leaves the checkInAddress field empty.
+        REPO015EXTGMAPS--REPO004SVCPROCESS: checkInAddress
+        deactivate REPO015EXTGMAPS
+
+        REPO004SVCPROCESS-REPO003DB: 3.1.4.2 queryUserHierarchy(userId)
+        activate REPO003DB
+        REPO003DB--REPO004SVCPROCESS: userHierarchyData
+        deactivate REPO003DB
+
+        REPO004SVCPROCESS-REPO004SVCPROCESS: 3.1.4.3 computeApproverHierarchy()
+
+        REPO004SVCPROCESS-REPO003DB: 3.1.4.4 update(attendanceId, {enrichedData})
+        activate REPO003DB
+        REPO003DB--REPO004SVCPROCESS: Success Ack
+        deactivate REPO003DB
+        deactivate REPO004SVCPROCESS
+
+        REPO003DB-REPO005SVCNOTIFY: 3.1.5 [EVENT] onCreate(attendanceRecord)
+        activate REPO005SVCNOTIFY
+
+        REPO005SVCNOTIFY-REPO003DB: 3.1.5.1 getSupervisorDetails(userId)
+        activate REPO003DB
+        note right of REPO005SVCNOTIFY: If the supervisor's fcmToken is not found, the push notification is skipped without error.
+        REPO003DB--REPO005SVCNOTIFY: {supervisorId, fcmToken}
+        deactivate REPO003DB
+
+        REPO005SVCNOTIFY-REPO005SVCNOTIFY: 3.1.5.2 sendPushNotification(fcmToken, payload)
+        deactivate REPO005SVCNOTIFY
+
+    else 3.2 [App Check Failed]
+        REPO001CLIENT-REPO016SECURITYAPPCHECK: 3.2.1 write(attendanceRecord)
+        activate REPO016SECURITYAPPCHECK
+        REPO016SECURITYAPPCHECK--REPO001CLIENT: 3.2.2 Error: Unauthorized
+        deactivate REPO016SECURITYAPPCHECK
+
+        REPO001CLIENT-REPO001CLIENT: 3.2.3 Display 'Check-in Failed' to user
+    end
+    deactivate REPO001CLIENT

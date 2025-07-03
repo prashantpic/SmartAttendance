@@ -1,0 +1,60 @@
+erDiagram
+    Tenant {
+        String tenantId PK
+    }
+
+    User {
+        String userId PK
+        String tenantId FK
+        String supervisorId FK
+    }
+
+    Attendance {
+        String attendanceId PK
+        String tenantId FK
+        String userId FK
+        String eventId FK
+    }
+
+    Event {
+        String eventId PK
+        String tenantId FK
+        String createdBy FK
+        Array<String> assignedTo
+    }
+
+    TenantConfig {
+        String configId PK
+        String tenantId FK
+    }
+
+    LinkedSheet {
+        String linkedSheetId PK
+        String tenantId FK
+    }
+
+    AuditLog {
+        String logId PK
+        String tenantId FK
+        String actorId FK
+    }
+
+    UserLegalAcceptance {
+        String acceptanceId PK
+        String userId FK
+        String tenantId FK
+    }
+
+    Tenant ||--o{ User : owns
+    User ||--o{ User : supervises
+    Tenant ||--o{ Attendance : owns
+    User ||--o{ Attendance : records
+    Event |o--o{ Attendance : applies_to
+    Tenant ||--o{ Event : owns
+    User ||--o{ Event : creates
+    Event }--{ User : assigned_to
+    Tenant ||--|| TenantConfig : configures
+    Tenant ||--o{ LinkedSheet : links
+    Tenant ||--o{ AuditLog : logs
+    User ||--o{ AuditLog : performs
+    User ||--|| UserLegalAcceptance : accepts

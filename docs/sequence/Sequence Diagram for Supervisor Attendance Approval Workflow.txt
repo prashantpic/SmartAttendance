@@ -1,0 +1,46 @@
+sequenceDiagram
+    actor Supervisor
+    participant "Flutter App" as REPO001CLIENT
+    participant "Firestore DB" as REPO003DB
+    participant "Notification Service" as REPO005SVCNOTIFY
+
+    Supervisor-REPO001CLIENT: 1. Navigates to 'Approvals' Dashboard
+    activate REPO001CLIENT
+
+    REPO001CLIENT-REPO003DB: 2. query(collection: 'attendance', where: 'approverHierarchy' array-contains supervisorId, 'status' == 'Pending')
+    activate REPO003DB
+    note over REPO003DB: Query uses an efficient array-contains filter on a pre-populated approverHierarchy field to find all records that this supervisor is responsible for.
+
+    REPO003DB--REPO001CLIENT: 3. return [pendingAttendanceRecords]
+    deactivate REPO003DB
+
+    REPO001CLIENT-REPO001CLIENT: 4. renderPendingList()
+
+    Supervisor-REPO001CLIENT: 5. Selects record and taps 'Approve'
+    note right of REPO001CLIENT: The Supervisor tapping 'Reject' follows the same flow, but the status is updated to 'Rejected'.
+
+    REPO001CLIENT-REPO003DB: 6. update('attendance/recordId', {status: 'Approved', approvalDetails: {...}})
+    activate REPO003DB
+
+    REPO003DB--REPO001CLIENT: 6.1. ack(success)
+
+    REPO001CLIENT-REPO001CLIENT: 6.2. updateUI(recordId, state='Approved')
+    deactivate REPO001CLIENT
+
+    note over REPO003DB: This is an asynchronous, event-driven invocation. The supervisor's UI flow is complete and does not wait for this process.
+    REPO003DB-REPO005SVCNOTIFY: 7. onUpdate Trigger (payload: before/after doc state)
+    activate REPO005SVCNOTIFY
+    note over REPO005SVCNOTIFY: The Cloud Function has a built-in retry mechanism for transient failures when sending the notification.
+
+    REPO005SVCNOTIFY-REPO005SVCNOTIFY: 7.1. Parse payload, get subordinate's userId
+
+    REPO005SVCNOTIFY-REPO003DB: 7.2. query(collection: 'users', where: 'userId' == subordinateId)
+    deactivate REPO003DB
+    activate REPO003DB
+
+    REPO003DB--REPO005SVCNOTIFY: 7.3. return {fcmToken: '...token...'}
+    deactivate REPO003DB
+
+    REPO005SVCNOTIFY-REPO005SVCNOTIFY: 7.4. sendPushNotification(fcmToken, 'Your request was approved.')
+
+    deactivate REPO005SVCNOTIFY

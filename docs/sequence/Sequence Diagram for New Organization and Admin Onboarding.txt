@@ -1,0 +1,53 @@
+sequenceDiagram
+    actor "Public Registration Page" as REPO018WEBPUBLIC
+    participant "Tenant Provisioning Function" as REPO011SVCTENANT
+    participant "Firebase Authentication" as REPO002AUTH
+    participant "Firestore Database" as REPO003DB
+
+    REPO018WEBPUBLIC-REPO011SVCTENANT: 1. HTTPS POST /provisionTenant(orgName, userName, email, password)
+    activate REPO011SVCTENANT
+
+    REPO011SVCTENANT-REPO011SVCTENANT: 2. Validate request payload
+
+    alt 3. Success Path | Auth Failure
+        REPO011SVCTENANT-REPO002AUTH: 3.1. createUser(email, password)
+        activate REPO002AUTH
+        REPO002AUTH--REPO011SVCTENANT: 3.1. UserRecord (contains userId)
+
+        REPO011SVCTENANT-REPO002AUTH: 3.2. setCustomUserClaims(userId, {tenantId, role: 'Admin', status: 'Active'})
+        note right of REPO002AUTH: Custom claims are set on the Auth user to enable role-based access control (RBAC) in Firestore Security Rules without needing extra database lookups.
+        REPO002AUTH--REPO011SVCTENANT: 3.2. Success
+
+        alt 3.3. Success Path | Firestore Failure
+            loop 3.3.1. Firestore Transaction
+                activate REPO003DB
+                note right of REPO003DB: All Firestore writes are performed in a single atomic transaction to ensure data consistency. If any write fails, all are rolled back.
+                REPO011SVCTENANT-REPO003DB: 3.3.1.1. create: /tenants/{tenantId}
+                REPO011SVCTENANT-REPO003DB: 3.3.1.2. create: /tenants/{tenantId}/users/{userId}
+                REPO011SVCTENANT-REPO003DB: 3.3.1.3. create: /tenants/{tenantId}/config/default
+                REPO003DB--REPO011SVCTENANT: Transaction Success
+                deactivate REPO003DB
+            end
+            REPO011SVCTENANT--REPO018WEBPUBLIC: 3.3.2. HTTP 201 Created
+
+        else 3.3.3. Firestore Failure
+            activate REPO003DB
+            REPO003DB--REPO011SVCTENANT: 3.3.3.1. Transaction Failure
+            deactivate REPO003DB
+
+            note left of REPO011SVCTENANT: If the Firestore transaction fails, a compensating action is performed to delete the newly created Auth user, preventing orphaned accounts.
+            REPO011SVCTENANT-REPO002AUTH: 3.3.3.2. deleteUser(userId)
+            REPO002AUTH--REPO011SVCTENANT: Success
+
+            REPO011SVCTENANT--REPO018WEBPUBLIC: 3.3.3.3. HTTP 500 Internal Server Error
+        end
+        deactivate REPO002AUTH
+
+    else 4. Auth Failure
+        activate REPO002AUTH
+        REPO002AUTH--REPO011SVCTENANT: 4.1. Error (e.g., email-already-exists)
+        deactivate REPO002AUTH
+        REPO011SVCTENANT--REPO018WEBPUBLIC: 4.2. HTTP 409 Conflict
+    end
+
+    deactivate REPO011SVCTENANT

@@ -1,0 +1,52 @@
+sequenceDiagram
+    actor "Cloud Scheduler" as SCHEDULER
+    participant "GoogleSheetsExportFunction" as REPO008SVCEXPORT
+    participant "Firestore Database" as REPO003DB
+    participant "Google Sheets API" as REPO014EXTGSHEETS
+    participant "NotificationDispatchFunction" as REPO005SVCNOTIFY
+
+    SCHEDULER-REPO008SVCEXPORT: 1. Invoke()
+    activate REPO008SVCEXPORT
+
+    REPO008SVCEXPORT-REPO003DB: 2. Query: Get tenants needing sync
+    activate REPO003DB
+    REPO003DB--REPO008SVCEXPORT: Return tenant list
+    deactivate REPO003DB
+
+    REPO008SVCEXPORT-REPO003DB: 3. Update: Set lastSyncStatus = 'In Progress'
+    activate REPO003DB
+    REPO003DB--REPO008SVCEXPORT: Ack
+    deactivate REPO003DB
+
+    REPO008SVCEXPORT-REPO003DB: 4. Query: Get attendance data for export
+    activate REPO003DB
+    REPO003DB--REPO008SVCEXPORT: Return attendance records
+    deactivate REPO003DB
+
+    REPO008SVCEXPORT-REPO014EXTGSHEETS: 5. append(data)
+    activate REPO014EXTGSHEETS
+    REPO014EXTGSHEETS--REPO008SVCEXPORT: Return Error: 403 Permission Denied
+    deactivate REPO014EXTGSHEETS
+
+    alt 6. Circuit Breaker identifies a permanent error
+        note over REPO008SVCEXPORT: The function receives a permanent error from the API. The internal circuit breaker logic identifies this is not a transient issue and that retries would be futile.
+        REPO008SVCEXPORT-REPO003DB: 6.1. Update: lastSyncStatus = 'Failed', store error message
+        activate REPO003DB
+        REPO003DB--REPO008SVCEXPORT: Ack
+        deactivate REPO003DB
+    end
+    deactivate REPO008SVCEXPORT
+
+    note right of REPO003DB: The update to the 'linkedSheets' document asynchronously triggers the notification function, decoupling the error handling from the user notification process.
+    REPO003DB-REPO005SVCNOTIFY: 7. onUpdate Trigger (linkedSheets document)
+    activate REPO005SVCNOTIFY
+
+    REPO005SVCNOTIFY-REPO003DB: 7.1. Query: Get Admin User's FCM token
+    activate REPO003DB
+    REPO003DB--REPO005SVCNOTIFY: Return FCM Token
+    deactivate REPO003DB
+
+    REPO005SVCNOTIFY-REPO005SVCNOTIFY: 7.2. Send FCM Push Notification: 'Sheets sync failed'
+    REPO005SVCNOTIFY--REPO005SVCNOTIFY: Ack
+
+    deactivate REPO005SVCNOTIFY
